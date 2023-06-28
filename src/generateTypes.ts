@@ -21,9 +21,12 @@ export type GenerateTypesConfig = {
 		includeCreateClientInterface?: boolean;
 		includeContentNamespace?: boolean;
 	};
+	cache?: boolean;
 };
 
-export function generateTypes(config: GenerateTypesConfig = {}): string {
+export async function generateTypes(
+	config: GenerateTypesConfig = {},
+): Promise<string> {
 	const fieldConfigs = config.fieldConfigs || {};
 
 	let code = "";
@@ -68,24 +71,27 @@ export function generateTypes(config: GenerateTypesConfig = {}): string {
 	if (config.customTypeModels) {
 		const allDocumentTypesTypeNames: string[] = [];
 
-		for (const model of config.customTypeModels) {
-			const customTypeType = buildCustomTypeType({
-				model,
-				localeIDs: config.localeIDs,
-				fieldConfigs,
-			});
+		await Promise.all(
+			config.customTypeModels.map(async (model) => {
+				const customTypeType = await buildCustomTypeType({
+					model,
+					localeIDs: config.localeIDs,
+					fieldConfigs,
+					cache: config.cache,
+				});
 
-			for (const auxiliaryType of customTypeType.auxiliaryTypes) {
-				code = addSection(auxiliaryType.code, code);
-			}
+				for (const auxiliaryType of customTypeType.auxiliaryTypes) {
+					code = addSection(auxiliaryType.code, code);
+				}
 
-			code = addSection(customTypeType.code, code);
+				code = addSection(customTypeType.code, code);
 
-			allDocumentTypesTypeNames.push(customTypeType.name);
+				allDocumentTypesTypeNames.push(customTypeType.name);
 
-			contentTypeNames.push(customTypeType.name);
-			contentTypeNames.push(customTypeType.dataName);
-		}
+				contentTypeNames.push(customTypeType.name);
+				contentTypeNames.push(customTypeType.dataName);
+			}),
+		);
 
 		if (config.customTypeModels.length > 0) {
 			const allDocumentTypesUnionName = "AllDocumentTypes";
