@@ -8,11 +8,15 @@ import { buildCustomTypeDataType } from "./buildCustomTypeDataType";
 import { buildTypeName } from "./buildTypeName";
 import { buildUnion } from "./buildUnion";
 import { checkHasUIDField } from "./checkHasUIDFIeld";
+import { createContentDigest } from "./createContentDigest";
+import { readCache } from "./readCache";
+import { setCache } from "./setCache";
 
 type BuildCustomTypeTypesArgs = {
 	model: CustomTypeModel;
 	localeIDs?: string[];
 	fieldConfigs: FieldConfigs;
+	cache?: boolean;
 };
 
 type BuildCustomTypeTypeReturnValue = {
@@ -22,9 +26,18 @@ type BuildCustomTypeTypeReturnValue = {
 	auxiliaryTypes: AuxiliaryType[];
 };
 
-export function buildCustomTypeType(
+export async function buildCustomTypeType(
 	args: BuildCustomTypeTypesArgs,
-): BuildCustomTypeTypeReturnValue {
+): Promise<BuildCustomTypeTypeReturnValue> {
+	if (args.cache) {
+		const key = createContentDigest(JSON.stringify(args.model));
+		const cached = await readCache(key);
+
+		if (cached) {
+			return JSON.parse(cached);
+		}
+	}
+
 	let code = "";
 
 	const auxiliaryTypes: AuxiliaryType[] = [];
@@ -55,10 +68,18 @@ export function buildCustomTypeType(
 		code,
 	);
 
-	return {
+	const result = {
 		name,
 		dataName: dataType.name,
 		code,
 		auxiliaryTypes,
 	};
+
+	if (args.cache) {
+		const key = createContentDigest(JSON.stringify(args.model));
+
+		await setCache(key, JSON.stringify(result));
+	}
+
+	return result;
 }
