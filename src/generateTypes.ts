@@ -1,5 +1,6 @@
 import type { CustomTypeModel, SharedSliceModel } from "@prismicio/client";
 import { source as typescript } from "common-tags";
+import LRUMap from "mnemonist/lru-map";
 
 import { addLine } from "./lib/addLine";
 import { addSection } from "./lib/addSection";
@@ -10,6 +11,8 @@ import { buildUnion } from "./lib/buildUnion";
 import { FieldConfigs } from "./types";
 
 export type TypesProvider = "@prismicio/client" | "@prismicio/types";
+
+const cache = new LRUMap<string, unknown>(100);
 
 export type GenerateTypesConfig = {
 	customTypeModels?: CustomTypeModel[];
@@ -71,36 +74,32 @@ export async function generateTypes(
 	if (config.customTypeModels) {
 		const allDocumentTypesTypeNames: string[] = [];
 
-		await Promise.all(
-			config.customTypeModels.map(async (model) => {
-				const customTypeType = await buildCustomTypeType({
-					model,
-					localeIDs: config.localeIDs,
-					fieldConfigs,
-					cache: config.cache,
-				});
+		for (const model of config.customTypeModels) {
+			const customTypeType = buildCustomTypeType({
+				model,
+				localeIDs: config.localeIDs,
+				fieldConfigs,
+				cache: config.cache ? cache : undefined,
+			});
 
-				for (const auxiliaryType of customTypeType.auxiliaryTypes) {
-					code = addSection(auxiliaryType.code, code);
-				}
+			for (const auxiliaryType of customTypeType.auxiliaryTypes) {
+				code = addSection(auxiliaryType.code, code);
+			}
 
-				code = addSection(customTypeType.code, code);
+			code = addSection(customTypeType.code, code);
 
-				allDocumentTypesTypeNames.push(customTypeType.name);
+			allDocumentTypesTypeNames.push(customTypeType.name);
 
-				contentTypeNames.push(customTypeType.name);
-				contentTypeNames.push(customTypeType.dataName);
-			}),
-		);
+			contentTypeNames.push(customTypeType.name);
+			contentTypeNames.push(customTypeType.dataName);
+		}
 
 		if (config.customTypeModels.length > 0) {
 			const allDocumentTypesUnionName = "AllDocumentTypes";
 			const allDocumentTypesUnion = buildUnion(allDocumentTypesTypeNames);
 
 			code = addSection(
-				typescript`
-					export type ${allDocumentTypesUnionName} = ${allDocumentTypesUnion};
-				`,
+				`export type ${allDocumentTypesUnionName} = ${allDocumentTypesUnion};`,
 				code,
 			);
 
@@ -113,6 +112,7 @@ export async function generateTypes(
 			const sharedSliceType = buildSharedSliceType({
 				model,
 				fieldConfigs,
+				cache: config.cache ? cache : undefined,
 			});
 
 			code = addSection(sharedSliceType.code, code);

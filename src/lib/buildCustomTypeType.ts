@@ -1,5 +1,6 @@
 import { CustomTypeModel } from "@prismicio/client";
 import { source as typescript } from "common-tags";
+import LRUMap from "mnemonist/lru-map";
 
 import { AuxiliaryType, FieldConfigs } from "../types";
 
@@ -9,14 +10,12 @@ import { buildTypeName } from "./buildTypeName";
 import { buildUnion } from "./buildUnion";
 import { checkHasUIDField } from "./checkHasUIDFIeld";
 import { createContentDigest } from "./createContentDigest";
-import { readCache } from "./readCache";
-import { setCache } from "./setCache";
 
 type BuildCustomTypeTypesArgs = {
 	model: CustomTypeModel;
 	localeIDs?: string[];
 	fieldConfigs: FieldConfigs;
-	cache?: boolean;
+	cache?: LRUMap<string, unknown>;
 };
 
 type BuildCustomTypeTypeReturnValue = {
@@ -26,15 +25,15 @@ type BuildCustomTypeTypeReturnValue = {
 	auxiliaryTypes: AuxiliaryType[];
 };
 
-export async function buildCustomTypeType(
+export function buildCustomTypeType(
 	args: BuildCustomTypeTypesArgs,
-): Promise<BuildCustomTypeTypeReturnValue> {
+): BuildCustomTypeTypeReturnValue {
 	if (args.cache) {
 		const key = createContentDigest(JSON.stringify(args.model));
-		const cached = await readCache(key);
+		const cached = args.cache.get(key);
 
 		if (cached) {
-			return JSON.parse(cached);
+			return cached as BuildCustomTypeTypeReturnValue;
 		}
 	}
 
@@ -78,7 +77,7 @@ export async function buildCustomTypeType(
 	if (args.cache) {
 		const key = createContentDigest(JSON.stringify(args.model));
 
-		await setCache(key, JSON.stringify(result));
+		args.cache.set(key, result);
 	}
 
 	return result;
